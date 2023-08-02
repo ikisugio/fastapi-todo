@@ -1,0 +1,55 @@
+name: Deploy todo-app-v1 to EC2
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-22.04
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Set env
+      run: |
+        export $(cat .env/.env.dev | xargs)
+
+    - name: Next steps
+      run: echo "Now I can use env variables from .env file"
+
+    - name: Set up Python 3.8
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.8
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Lint with flake8
+      run: |
+        pip install flake8
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=77 --statistics
+
+    # - name: Change directory to .pulumi
+    #   run: cd .pulumi
+
+    - name: Install Pulumi
+      uses: pulumi/action-install-pulumi-cli@v1.0.1
+
+    - name: Deploy
+      run: |
+        pulumi login --local
+        cd .pulumi
+        pip install python-dotenv
+        pulumi stack init dev
+        pulumi up --yes
+      env:
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+        PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_PASSPHRASE }}
