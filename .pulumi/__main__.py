@@ -1,51 +1,46 @@
 import pulumi
 from pulumi_aws import ec2
-from dotenv import load_dotenv
-import os  # Add this line
+from configs import (
+    aws_envs,
+    ec2_entry_script,
+    ingress_dicts,
+)
 
-# AWSの環境変数を読み込む
-load_dotenv('../.env.pub/.env.dev')
-aws_envs = {key.lower(): val for key, val in os.environ.items()}  # Use os module here
-
-# DockerとFastAPIアプリケーションを起動するためのスクリプト
-user_data = f"""
-#!/bin/bash
-curl -fsSL https://get.docker.com -o get-docker.sh
-sh get-docker.sh
-docker run -d -p 80:80 {aws_envs['dockerhub_username']}/fastapi-todo  # Use aws_envs instead of envs
-"""
-
-# セキュリティグループのイングレスルール設定
-ingress_args = {
-    'protocol': 'tcp',
-    'from_port': 80,
-    'to_port': 80,
-    'cidr_blocks': ['0.0.0.0/0'],
-}
-
-# セキュリティグループの設定
-security_group_config = {
+sg_dict = {
     'name': aws_envs['sg_name'],
     'description': aws_envs['sg_desc'],
     'ingress': [
-        ec2.SecurityGroupIngressArgs(**ingress_args),
+        ec2.SecurityGroupIngressArgs(**ingress_dict),
     ],
 }
 
-# セキュリティグループの作成
-security_group = ec2.SecurityGroup(aws_envs['sg_name'], **security_group_config)
+# SGの作成または取得
+try:
+    # 既存のセキュリティグループを参照
+    sg = ec2.get_security_group(
+        name=aws_envs['sg_name'],
+        opts=pulumi.ResourceOptions(id=aws_envs['sg_name']),
+    )
+except Exception:
+    # セキュリティグループが存在しない場合は新規作成
+    sg = ec2.SecurityGroup(aws_envs['sg_name'], **sg_dict)
 
-# EC2インスタンスの作成
+# EC2インスタンスの作成または更新
 instance = ec2.Instance(
-    instance_type=aws_envs['instance_type'],  # Use aws_envs instead of envs
-    ami=aws_envs['ubuntu_ami_id'],  # Use aws_envs instead of envs
-    vpc_security_group_ids=[security_group.id], # セキュリティグループのIDを指定
-    user_data=user_data, # DockerとFastAPIアプリケーションを起動するスクリプト
+    aws_envs['instance_name'],
+    instance_type=aws_envs['instance_type'],
+    ami=aws_envs['ubuntu_ami_id'],
+    vpc_security_group_ids=[sg.id],
+    user_data=ec2_entry_script,
     tags={
-        "Name": aws_envs['instance_tag_name'],  # Use aws_envs instead of envs
+        "Name": aws_envs['instance_tag_name'],
     },
-    **aws_envs # アンパックして環境変数を渡します
+    opts=pulumi.ResourceOptions(id=aws_envs['instance_name'], ignore_changes=["ami", "instance_type", "user_data"]),
 )
+
+# インスタンスIDをファイルに保存
+with open('.pulumi/instance_id.txt', 'w') as f:
+    f.write(instance.id)
 
 pulumi.export('instance_id', instance.id)
 pulumi.export('public_ip', instance.public_ip)
