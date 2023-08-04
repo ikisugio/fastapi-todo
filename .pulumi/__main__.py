@@ -10,7 +10,7 @@ sg_dict = {
     'name': aws_envs['sg_name'],
     'description': aws_envs['sg_desc'],
     'ingress': [
-        ec2.SecurityGroupIngressArgs(**ingress_dict),
+        ec2.SecurityGroupIngressArgs(**ingress_dicts),
     ],
 }
 
@@ -35,7 +35,11 @@ instance = ec2.Instance(
     tags={
         "Name": aws_envs['instance_tag_name'],
     },
-    opts=pulumi.ResourceOptions(id=aws_envs['instance_name'], ignore_changes=["ami", "instance_type", "user_data"]),
+    opts=pulumi.ResourceOptions(id=aws_envs['instance_name'],
+                                ignore_changes=["ami",
+                                                "instance_type",
+                                                "user_data"]
+                               ),
 )
 
 # インスタンスIDをファイルに保存
